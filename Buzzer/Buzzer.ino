@@ -1,14 +1,22 @@
-#include <DFPlayer_Mini_Mp3.h>
-#include <SoftwareSerial.h>
-#include <LiquidCrystal_I2C.h>
-#include <RTClib.h>
-#include <Keypad.h>
-#include <Wire.h>
-#include <EEPROM.h>
+#include <DFPlayer_Mini_Mp3.h>        //   Подключения библиотек.
+#include <SoftwareSerial.h>           //   Mp3 модуль.
+#include <LiquidCrystal_I2C.h>        //   1602 дисплей.
+#include <RTClib.h>                   //   Модуль реального времени.
+#include <Keypad.h>                   //   Матричные кнопки.
+//#include <Wire.h>
+#include <EEPROM.h>                   //   Работа с ПЗУ Arduino.
 
-
-RTC_DS1307 rtc;
-LiquidCrystal_I2C lcd(0x3F, 16, 2);
+const byte ROWS = 4;
+const byte COLS = 4;
+char Keys[ROWS][COLS] = {
+  {'1','2','3','A'},
+  {'4','5','6','B'},
+  {'7','8','9','C'},
+  {'*','0','#','D'}
+};
+byte rowPins[ROWS] = {9, 8, 7, 6};        //  Подключения пинов для строк.
+byte colPins[COLS] = {13, 12, 11, 10};    //  Подключения пинов для столбцов.
+Keypad keypad = Keypad( makeKeymap(Keys), rowPins, colPins, ROWS, COLS);  // Инициализация клавиш.
 
 byte time_set;
 byte count_call = 0;
@@ -20,24 +28,10 @@ boolean endCall = true;
 byte numDay;
 byte current_call = 0;
 
-const byte ROWS = 4; //four rows
-const byte COLS = 4; //four columns
-//define the cymbols on the buttons of the keypads
-char Keys[ROWS][COLS] = {
-  {'1','2','3','A'},
-  {'4','5','6','B'},
-  {'7','8','9','C'},
-  {'*','0','#','D'}
-};
-byte rowPins[ROWS] = {9, 8, 7, 6}; //connect to the row pinouts of the keypad
-byte colPins[COLS] = {13, 12, 11, 10}; //connect to the column pinouts of the keypad
-
-//initialize an instance of class NewKeypad
-Keypad keypad = Keypad( makeKeymap(Keys), rowPins, colPins, ROWS, COLS); 
-
+RTC_DS1307 rtc; 
+LiquidCrystal_I2C lcd(0x3F, 16, 2);
 
 void setup (){
-  
   lcd.init();
   lcd.backlight();
   Serial.begin(9600);
@@ -46,19 +40,11 @@ void setup (){
   mp3_set_serial (Serial);
   delay(1);
   mp3_set_volume(25);
-
+  
   //rtc.adjust(DateTime(__DATE__, __TIME__));
-  //EEPROM.write(0, 0); // Убрать после сборки
- 
-  time_set = EEPROM.read(0);
-  if (time_set == 0 || time_set == 255){ 
-    time_set = set_SettingsCall();
-    EEPROM.write(0, time_set);
-  }
-  lcd.clear();
 }
 
-String set_dayOfWeek(byte dayWeek){
+String set_dayOfWeek(byte &dayWeek){
   switch (dayWeek) {
     case 1:
       return "Mon";
@@ -81,14 +67,14 @@ String set_dayOfWeek(byte dayWeek){
     case 7:
       return "Sun";
       break;
+    default:
+      return "Error";
   }
 }
 
 byte set_SettingsCall(){
-  for (byte d = 1; d < 7; d++){
+  for (byte d = 1; d < 7; d++){ // Цикл кол-во дней в недели.
     char key = NO_KEY;
-    char count_callM[2];
-    byte i = 0;
     boolean copy = false;
     if (d > 1){
       //Копирование настроек с Понедельника
@@ -101,17 +87,15 @@ byte set_SettingsCall(){
       key = keypad.waitForKey();
         if (key == 'A'){
           //Копируем
-          EEPROM.write(d, EEPROM.read(1));
+          EEPROM.write(d, EEPROM.read(1)); // Записываем кол-во звонков.
           for (int x = 0, j = ((d-1) * 96) + 8; x < EEPROM.read(1); x++, j+=2) {
             EEPROM.write(j, EEPROM.read( j - (96 * (d-1)) ) );
             EEPROM.write(j + 1, EEPROM.read( (j - (96 * (d-1))) + 1 ) );            
           }
-         copy = true;
-         break;          
+         copy = true;       
         }
         if (key == 'C'){
           copy = false;
-          break;
         }
       }
     }
@@ -121,16 +105,16 @@ byte set_SettingsCall(){
     lcd.print(set_dayOfWeek(d));
     lcd.setCursor(0, 1);
     lcd.print("Number calls:");
-    lcd.setCursor(14, 1);
-
-    //key = keypad.waitForKey();
+    lcd.setCursor(14, 1);             //        Копировать число символов отсюда.
+    char count_callM[2];
+    byte i = 0;
     while (key != 'A') {
       key = keypad.waitForKey();
       if (i == 0 && key == '0') { continue; } 
       if (key == 'B' && i > 0) {
           i--;
           count_callM[i] = ' ';
-          lcd.setCursor(i + 14, 1); // 12 Заменить на кол-во букв прошлого принта
+          lcd.setCursor(i + 14, 1);   //        сюда
           lcd.print(" ");
           continue;   
       }
@@ -184,17 +168,18 @@ byte set_SettingsCall(){
         lcd.setCursor(9, 1);
         lcd.print(timeCall[3]);
         
-        key = keypad.waitForKey();   
+        key = keypad.waitForKey(); 
+        
+        if (i > 3) { continue; };  
         if (key == 'B' && i > 0) {
           i--;
-          timeCall[i] = '8';
-          continue;   
+          timeCall[i] = '8'; 
         }
+        if (key == 'D' || key == '*' || key == '#' || key == 'B'){ continue; } 
         if (key == 'C'){
           return 0;
           break;
         }
-        if (key == 'D' || key == '*' || key == '#' || key == 'B'){ continue; } 
         if (key == 'A'){
           if(i > 3) { 
             break; 
@@ -203,7 +188,7 @@ byte set_SettingsCall(){
             continue; 
           }
         }     
-        if (i > 3) { continue; };
+
         //Проверка правильности времени
         if (i == 0 && int(key) > 50) { continue; } // Число 2 равно числу 50 ASCII
         if (i == 1 && timeCall[0] == '2' && int(key) > 51) { continue; }  //С 00:00 ПРИДУМАТЬ
@@ -246,21 +231,22 @@ byte set_SettingsCall(){
 }
 
 void set_nextCall(byte dayWeek, DateTime now){
+  numDay = dayWeek;
   if (dayWeek == 7){
     endCall = true;
     return;
-  }
-  numDay = dayWeek;
+  } 
   byte call_count_mem = EEPROM.read(dayWeek);
   byte tmpTimeH;
   byte tmpTimeM;
   current_call_h = 0;
   current_call_m = 0;
+  endCall = false;
     
   for (int i = 0, j = ((dayWeek - 1) * 96) + 8; i != call_count_mem; i++, j+=2) {
      tmpTimeH = EEPROM.read(j);
      tmpTimeM = EEPROM.read(j+1);
-     if ( tmpTimeH == now.hour() && tmpTimeM == now.minute()) { continue; }      
+     if ( tmpTimeH == now.hour() && tmpTimeM == now.minute()) { continue; }     // 8,00  10,00 
      if ( tmpTimeH >= now.hour() ) {
         if (tmpTimeH == now.hour()) {
           if(tmpTimeM > now.minute()) {
@@ -277,7 +263,6 @@ void set_nextCall(byte dayWeek, DateTime now){
           current_call_h = tmpTimeH;
           current_call_m = tmpTimeM;  
         }
-
         if (tmpTimeM == 0){
           current_call_m = 60;
         }
@@ -285,12 +270,8 @@ void set_nextCall(byte dayWeek, DateTime now){
         break;
      }
   }
-
   
-  endCall = false;
- 
   if (current_call_h == 0 && current_call_m == 0){
-    //Если уроки кончились
     endCall = true;
   } else {
     if(current_call > (call_count_mem / 2)){     // count = 8
@@ -299,6 +280,7 @@ void set_nextCall(byte dayWeek, DateTime now){
   }
   EEPROM.write(1000, current_call);
 }
+
 void loop () {
 
   DateTime now = rtc.now();
@@ -306,25 +288,30 @@ void loop () {
   byte cur_dayWeek = now.dayOfTheWeek();
   today = set_dayOfWeek(cur_dayWeek); 
   
-  if (time_set == 0){
+  if (time_set == 0 || time_set == 255){
     time_set = set_SettingsCall();
     lcd.clear();
     set_nextCall(cur_dayWeek, now);
-  } 
-    
+  }   
   char key = keypad.getKey();
-  if(key == 'D'){
-    time_set = 0;
-    delay(2000);
+  if (key != NO_KEY){
+    if(key == 'D'){
+      time_set = 0;
+      delay(2000);
+    }
+    if(key == '*'){
+      rtc.adjust(now.unixtime() + 60);
+      set_nextCall(cur_dayWeek, now);
+    }
+    if(key == '#'){
+      rtc.adjust(now.unixtime() - 60);
+      set_nextCall(cur_dayWeek, now);
+    }
+    if(key == '0'){
+      set_nextCall(cur_dayWeek, now);     
+    }
   }
-  if(key == '*'){
-    rtc.adjust(now.unixtime() + 60);
-    set_nextCall(cur_dayWeek, now);
-  }
-  if(key == '#'){
-    rtc.adjust(now.unixtime() - 60);
-    set_nextCall(cur_dayWeek, now);
-  } 
+
   lcd.setCursor(0, 0);
   lcd.print(now.hour()/10); 
   lcd.print(now.hour()%10); 
@@ -342,19 +329,6 @@ void loop () {
 
   byte timeToCallH = current_call_h - now.hour();
   byte timeToCallM = current_call_m - now.minute(); 
-
-  if (timeToCallH > 25 && !endCall) { set_nextCall(cur_dayWeek, now); } 
-
-  if(timeToCallH == 0 && timeToCallM == 0 && !endCall){
-    current_call = EEPROM.read(1000);
-    mp3_play (current_call);   
-    if ( cur_dayWeek == 1 && current_call == 1 ){
-      delay (30000);
-      mp3_play(90);
-    }    
-    delay(10);    
-    set_nextCall(cur_dayWeek, now);
-  } 
   
   if (endCall){
     if (cur_dayWeek - numDay != 0){
@@ -363,6 +337,17 @@ void loop () {
     lcd.print("Today lesson end");
     lcd.print("      ");
   } else {
+    if (timeToCallH > 25) { set_nextCall(cur_dayWeek, now); }
+    if(timeToCallH == 0 && timeToCallM == 0){
+      current_call = EEPROM.read(1000);
+      mp3_play (current_call);   
+      if ( cur_dayWeek == 1 && current_call == 1 ){
+        delay (30000);
+        mp3_play(90);
+      }    
+      delay(10);    
+      set_nextCall(cur_dayWeek, now);
+    } 
     lcd.setCursor(0, 1);
     lcd.print("To call:  ");
     lcd.setCursor(10, 1);
