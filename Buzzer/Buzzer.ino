@@ -40,7 +40,7 @@ void setup (){
   mp3_set_serial (Serial);
   delay(1);
   mp3_set_volume(25);
-  
+  time_set = EEPROM.read(0);
   //rtc.adjust(DateTime(__DATE__, __TIME__));
 }
 
@@ -65,10 +65,10 @@ String set_dayOfWeek(byte &dayWeek){
       return "Sat";
       break;
     case 7:
-      return "Sun";
+      return "Воскресенье";
       break;
     default:
-      return "Error";
+      return "Ошибка";
   }
 }
 
@@ -82,7 +82,7 @@ byte set_SettingsCall(){
       lcd.print("Set Mon in ");
       lcd.print(set_dayOfWeek(d));
       lcd.setCursor(4 , 1);
-      lcd.print("Yes/No"); 
+      lcd.print("Да/Нет"); 
       while (key != 'A' || key != 'C'){
       key = keypad.waitForKey();
         if (key == 'A'){
@@ -92,10 +92,13 @@ byte set_SettingsCall(){
             EEPROM.write(j, EEPROM.read( j - (96 * (d-1)) ) );
             EEPROM.write(j + 1, EEPROM.read( (j - (96 * (d-1))) + 1 ) );            
           }
-         copy = true;       
+          
+         copy = true;
+         break;       
         }
         if (key == 'C'){
           copy = false;
+          break;
         }
       }
     }
@@ -337,7 +340,7 @@ void loop () {
     lcd.print("Today lesson end");
     lcd.print("      ");
   } else {
-    if (timeToCallH > 25) { set_nextCall(cur_dayWeek, now); }
+    if (timeToCallH > 25 || timeToCallM > 60) { set_nextCall(cur_dayWeek, now); }
     if(timeToCallH == 0 && timeToCallM == 0){
       current_call = EEPROM.read(1000);
       mp3_play (current_call);   
